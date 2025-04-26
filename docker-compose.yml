@@ -1,0 +1,69 @@
+services:
+  #PHP Service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: CupNoodles/tastyigniter
+    container_name: app
+    restart: unless-stopped
+    tty: true
+    environment:
+      SERVICE_NAME: app
+      SERVICE_TAGS: dev
+      APP_URL: https://tastyigniter.example.com
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_DATABASE: tastyigniter
+      DB_USERNAME: tastyigniter
+      DB_PASSWORD: password
+    working_dir: /var/www/tastyigniter
+    volumes:
+      - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
+      - ./tastyigniter:/var/www/tastyigniter
+    networks:
+      - tastyigniter-network
+
+  #Nginx Service
+  webserver:
+    image: nginx:alpine
+    container_name: webserver
+    restart: unless-stopped
+    tty: true
+    ports:
+      - "8080:80"
+      - "4443:443"
+    volumes:
+      - ./tastyigniter:/var/www/tastyigniter
+      - ./nginx/conf.d/:/etc/nginx/conf.d/
+    networks:
+      - tastyigniter-network
+
+  #MySQL Service
+  db:
+    image: mysql:8.0
+    container_name: db
+    restart: unless-stopped
+    tty: true
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: tastyigniter
+      MYSQL_USER: tastyigniter
+      MYSQL_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: password
+    volumes:
+      - dbdata:/var/lib/mysql
+      - ./mysql/my.cnf:/etc/mysql/my.cnf
+    networks:
+      - tastyigniter-network
+
+#Docker Networks
+networks:
+  tastyigniter-network:
+    driver: bridge
+
+#Volumes
+volumes:
+  dbdata:
+    driver: local
