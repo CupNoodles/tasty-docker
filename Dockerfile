@@ -25,13 +25,14 @@ RUN apt-get update && apt-get install -y \
     libmcrypt-dev \
     libxml2-dev \
     libonig-dev \
-    libzip-dev
+    libzip-dev \
+    libicu-dev
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
-RUN docker-php-ext-install bcmath pdo_mysql curl dom mbstring exif intl zip
+RUN docker-php-ext-install bcmath pdo_mysql dom mbstring exif intl zip
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg
 RUN docker-php-ext-install gd
 
