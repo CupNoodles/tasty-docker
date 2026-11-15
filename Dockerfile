@@ -1,57 +1,49 @@
-FROM php:8.3-fpm
+ARG PHP_VERSION=8.3
+FROM php:${PHP_VERSION}-fpm
 
-# Set working directory
-WORKDIR /var/www
+# Match the container user to your host user so files in the ./tastyigniter
+# bind mount stay owned by you. build.sh passes these through automatically.
+ARG UID=1000
+ARG GID=1000
 
-# Install dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpng-dev \
-    libjpeg62-turbo-dev \
-    libfreetype6-dev \
-    locales \
-    openssl \
-    zip \
-    unzip \
-    jpegoptim optipng pngquant gifsicle \
-    vim \
-    unzip \
-    git \
-    curl \
-    libzip-dev \
-    libcurl4-openssl-dev \
-    libjpeg-dev \
-    libpng-dev \
-    libmcrypt-dev \
-    libxml2-dev \
-    libonig-dev \
-    libzip-dev \
-    libicu-dev
+# Helper that pulls in the right system libs for each PHP extension
+COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
-# Clear cache
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+        unzip \
+        zip \
+        vim \
+        default-mysql-client \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions
-RUN docker-php-ext-install bcmath pdo_mysql dom mbstring exif intl zip
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg
-RUN docker-php-ext-install gd
+# dom, mbstring, curl, etc. are already compiled into the official image.
+# xdebug is installed but disabled unless XDEBUG_MODE is set (see compose file).
+RUN install-php-extensions \
+        bcmath \
+        exif \
+        gd \
+        intl \
+        opcache \
+        pcntl \
+        pdo_mysql \
+        zip \
+        xdebug
 
-# Install composer
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+RUN groupadd -g ${GID} www \
+    && useradd -u ${UID} -g www -ms /bin/bash www \
+    && mkdir -p /var/www/tastyigniter /home/www/.composer \
+    && chown -R www:www /var/www /home/www
 
-# Add user for webapp
-RUN groupadd -g 1000 www
-RUN useradd -u 1000 -ms /bin/bash -g www www
+COPY --chmod=755 create-tastyigniter.sh /usr/local/bin/create-tastyigniter.sh
 
-# Switch to www user
+WORKDIR /var/www/tastyigniter
 USER www
 
-# Create and set entrypoint script
-COPY create-tastyigniter.sh /usr/local/bin/create-tastyigniter.sh
-COPY --chown=www:www create-tastyigniter.sh /usr/local/bin/create-tastyigniter.sh
+ENV COMPOSER_HOME=/home/www/.composer
+
 ENTRYPOINT ["/usr/local/bin/create-tastyigniter.sh"]
 
-
-# Expose port 9000 and start php-fpm server
 EXPOSE 9000
 CMD ["php-fpm"]

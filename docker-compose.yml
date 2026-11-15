@@ -1,52 +1,59 @@
 services:
-  #PHP Service
+  # PHP-FPM (TastyIgniter)
   app:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: CupNoodles/tastyigniter
-    container_name: app
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.3}
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    image: cupnoodles/tastyigniter:php${PHP_VERSION:-8.3}
     restart: unless-stopped
-    tty: true
     environment:
-      SERVICE_NAME: app
-      SERVICE_TAGS: dev
-      APP_URL: http://localhost:8080
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:${HTTP_PORT:-8080}
       DB_CONNECTION: mysql
       DB_HOST: db
+      DB_PORT: 3306
       DB_DATABASE: tastyigniter
       DB_USERNAME: tastyigniter
       DB_PASSWORD: password
-    working_dir: /var/www/tastyigniter
+      MAIL_MAILER: smtp
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      # Xdebug is off by default. Enable with e.g. `XDEBUG_MODE=debug docker compose up -d`
+      XDEBUG_MODE: ${XDEBUG_MODE:-off}
+      XDEBUG_CONFIG: client_host=host.docker.internal client_port=9003 start_with_request=yes
+      PHP_IDE_CONFIG: serverName=tastyigniter
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
-      - ./php/local.ini:/usr/local/etc/php/conf.d/local.ini
+      - ./php/local.ini:/usr/local/etc/php/conf.d/zz-local.ini:ro
       - ./tastyigniter:/var/www/tastyigniter
-    networks:
-      - tastyigniter-network
+      - composer-cache:/home/www/.composer/cache
+    depends_on:
+      db:
+        condition: service_healthy
 
-  #Nginx Service
+  # Nginx
   webserver:
-    image: nginx:alpine
-    container_name: webserver
+    image: nginx:1.28-alpine
     restart: unless-stopped
-    tty: true
     ports:
-      - "8080:80"
-      - "4443:443"
+      - "${HTTP_PORT:-8080}:80"
     volumes:
-      - ./tastyigniter:/var/www/tastyigniter
-      - ./nginx/conf.d/:/etc/nginx/conf.d/
-    networks:
-      - tastyigniter-network
+      - ./tastyigniter:/var/www/tastyigniter:ro
+      - ./nginx/conf.d/:/etc/nginx/conf.d/:ro
+    depends_on:
+      - app
 
-  #MySQL Service
+  # MySQL
   db:
-    image: mysql:8.0
-    container_name: db
+    image: mysql:8.4
     restart: unless-stopped
-    tty: true
     ports:
-      - "3306:3306"
+      - "127.0.0.1:${DB_HOST_PORT:-3306}:3306"
     environment:
       MYSQL_DATABASE: tastyigniter
       MYSQL_USER: tastyigniter
@@ -54,16 +61,21 @@ services:
       MYSQL_ROOT_PASSWORD: password
     volumes:
       - dbdata:/var/lib/mysql
-      - ./mysql/my.cnf:/etc/mysql/my.cnf
-    networks:
-      - tastyigniter-network
+      - ./mysql/my.cnf:/etc/mysql/conf.d/tastyigniter.cnf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
 
-#Docker Networks
-networks:
-  tastyigniter-network:
-    driver: bridge
+  # Catches all outgoing mail (order confirmations etc). Web UI at http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
 
-#Volumes
 volumes:
   dbdata:
-    driver: local
+  composer-cache:
