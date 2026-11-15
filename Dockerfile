@@ -33,7 +33,7 @@ RUN install-php-extensions \
 
 RUN groupadd -g ${GID} www \
     && useradd -u ${UID} -g www -ms /bin/bash www \
-    && mkdir -p /var/www/tastyigniter /home/www/.composer \
+    && mkdir -p /var/www/tastyigniter /home/www/.composer/cache \
     && chown -R www:www /var/www /home/www
 
 COPY --chmod=755 create-tastyigniter.sh /usr/local/bin/create-tastyigniter.sh
